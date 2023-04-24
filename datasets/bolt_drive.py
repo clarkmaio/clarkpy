@@ -1,6 +1,5 @@
 import pandas as pd
 from typing import Dict
-from __init__ import load_pickle_from_url
 
 LINK = 'https://github.com/clarkmaio/datasets/raw/main/bolt_drive.parquet'
 

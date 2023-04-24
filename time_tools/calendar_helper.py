@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 
 @dataclass
-class Calendar:
+class CalendarHelper:
 
     @staticmethod
     def load_calendar(start_date: datetime, end_date: datetime, freq: str = 'D') -> pd.DataFrame:
@@ -15,16 +15,30 @@ class Calendar:
         index = pd.Index(timerange, name='valuedate')
         calendar = pd.DataFrame(index=index)
 
-        calendar = Calendar.__add_features(calendar)
+        calendar = CalendarHelper.__add_features(calendar)
         return calendar
 
     @staticmethod
     def __add_features(calendar: pd.DataFrame) -> pd.DataFrame:
+        '''Create all boring calendar features'''
 
+        calendar['hour'] = calendar.index.hour
         calendar['day'] = calendar.index.day
+        calendar['doy'] = calendar.index.dayofyear
+        calendar['weekday'] = calendar.index.weekday
+        calendar['woy'] = calendar.index.isocalendar()['week']
+        calendar['month'] = calendar.index.dayofyear
+        calendar['quarter'] = calendar.index.quarter
+
+
+        return calendar
+
+
+
+
 
         return calendar
 
 if __name__ == '__main__':
 
-    calendar = Calendar.load_calendar(datetime(2020, 1, 1), end_date=datetime(2020, 12, 31, 23), freq='H')
+    calendar = CalendarHelper.load_calendar(datetime(2020, 1, 1), end_date=datetime(2020, 12, 31, 23), freq='H')
