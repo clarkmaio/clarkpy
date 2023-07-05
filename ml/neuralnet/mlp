@@ -1,0 +1,107 @@
+
+import numpy as np
+from typing import Any, Union
+
+from dataclasses import dataclass
+
+import pandas as pd
+from keras.models import Sequential
+from keras.optimizers import Adam
+from keras.layers import Dense, Dropout
+
+from sklearn.pipeline import make_pipeline
+from sklearn.base import BaseEstimator
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
+
+
+
+@dataclass
+class SimpleMLP(BaseEstimator):
+    '''Simple class to esily build a MLP. Return a model ready to use with fit/predict syntax sklearn wise'''
+
+    loss: Union[str, Any] = 'mean_absolute_error'
+
+    n_hidden_layer: int = 2
+    hidden_layer_units: int = 10
+    dropout_rate: float = 0.
+    hidden_activation: str = 'relu'
+    output_activation: str = 'linear'
+
+    epochs: int = 100
+    batch_size: int = 64
+    learning_rate: float = 0.01
+
+    validation_size: float =.2
+    early_stopping_patience: int = 30
+
+    verbose: int = 0
+
+
+    def __post_init__(self):
+
+        self._pipeline = None
+        self._nn = None
+        self._history_fit_loss = None
+
+
+
+    def _build_neuralnet(self, input_dim):
+
+        # Initialize sequential
+        self._nn = Sequential()
+
+        # Hidden layer
+        for i in range(self.n_hidden_layer):
+            if i == 0:
+                self._nn.add(Dense(units=self.hidden_layer_units, activation=self.hidden_activation, input_dim=input_dim))
+            else:
+                self._nn.add(Dense(units=self.hidden_layer_units, activation=self.hidden_activation))
+            self._nn.add(Dropout(rate=self.dropout_rate))
+
+        # Output layer
+        self._nn.add(Dense(1, activation=self.output_activation))
+
+        # Compile neural net
+        optimizer = Adam(learning_rate=self.learning_rate)
+        self._nn.compile(optimizer=optimizer, loss=self.loss, metrics=[self.loss])
+
+
+    def _build_pipeline(self):
+        self._pipeline = make_pipeline(StandardScaler(), self._nn)
+
+    def fit(self, X, y):
+
+        self._build_neuralnet(X=X)
+        self._build_pipeline()
+
+        self._pipeline.fit(X, y, sequential__epochs = self.epochs, sequential__batch_size = self.batch_size, sequential__verbose = self.verbose)
+        self._history_fit_loss = pd.DataFrame(self._pipeline.steps[1][1].history.history)
+
+
+    def predict(self, X):
+        return self._pipeline.predict(X)
+
+
+    @property
+    def history_fit_loss(self):
+        return self._history_fit_loss
+
+if __name__ == '__main__':
+
+
+    X = np.linspace(0, 5, 1000)
+    y = np.sin(X) + np.random.randn(1000)*0.5
+
+    mlp = SimpleMLP(n_hidden_layer=2, hidden_layer_units=10, epochs=100, hidden_activation='relu', output_activation='linear')
+    mlp.fit(X, y)
+    y_pred = mlp.predict(X)
+
+    import matplotlib.pyplot as plt
+    plt.plot(X.flatten(), y_pred, color='red')
+    plt.scatter(x=X.flatten(), y=y, color='blue')
+
+    
+    
+
