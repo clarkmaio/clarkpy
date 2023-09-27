@@ -4,11 +4,11 @@ from typing import Dict
 LINK = 'https://github.com/clarkmaio/datasets/raw/main/taxi_drive.parquet'
 
 DESCR = '''
-        Bolt drive dataset
+        Taxi drive dataset
         -------------------------
         
         Description:
-            In this dataset you will find data of Bolt rides in Tallinn.
+            In this dataset you will find data of Taxi rides in Tallinn.
             Each sample correspond to a different ride.
             For each sample you will find starting position, ending position and value of the ride in EUR (namely the cost of the ride service).
         
@@ -37,7 +37,7 @@ DESCR = '''
         '''
 
 
-def load_bolt_drive() -> Dict:
+def load_taxi_drive() -> Dict:
     df = pd.read_parquet(LINK)
     df['start_time'] = pd.to_datetime(df['start_time'])
 
@@ -46,4 +46,4 @@ def load_bolt_drive() -> Dict:
 
 
 if __name__ == '__main__':
-    dataset = load_bolt_drive()
+    dataset = load_taxi_drive()
