@@ -1,7 +1,7 @@
 import pandas as pd
 from typing import Dict
 
-LINK = 'https://github.com/clarkmaio/datasets/raw/main/bolt_drive.parquet'
+LINK = 'https://github.com/clarkmaio/datasets/raw/main/taxi_drive.parquet'
 
 DESCR = '''
         Bolt drive dataset

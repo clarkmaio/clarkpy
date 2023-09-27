@@ -29,7 +29,7 @@ class Blend:
         self.__variable: cvx.Variable = None
         self.__is_trained: bool = False
 
-    def fit(self, X: np.ndarray, y: np.ndarray, sample_weights: Iterable = None) -> Result:
+    def fit(self, X: Union[np.ndarray, pd.DataFrame], y: Union[np.ndarray, pd.Series], sample_weights: Iterable = None) -> Result:
         '''
         Fit the model
         '''
@@ -37,6 +37,12 @@ class Blend:
         # Check input
         assert X.shape[0] == y.shape[0], 'X and y must have the same number of rows'
         assert X.shape[1] > 0, 'X must have at least one column'
+
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+
+        if isinstance(y, pd.Series):
+            y = y.values
 
 
         # Define variables
@@ -170,7 +176,7 @@ class Blend:
     def diagnostic_plot(self, x: Iterable, models: Union[np.ndarray, pd.DataFrame], target: Iterable, model_names: Iterable = None) -> None:
         '''
         Create a diagnostic plot to visualize models, bias and weights of Blend
-        :param feature used as x axis. A.e. for timeseries it should be time
+        :param x: feature used as x axis. A.e. for timeseries it should be time
         :param models: np.ndarray containing model predictions
         :param target: target
         :param blend: Fitted blend class
@@ -212,7 +218,7 @@ class Blend:
         ax2.plot(x, target - y_hat, 'x', color='red', label='Bias Blend')
         ax2.grid(linestyle=':')
         ax2.legend(loc='upper left')
-        ax2.set_title('Bias', fontweight='bold')
+        ax2.set_title('Residuals', fontweight='bold')
 
         # Weights bar plot
         ax3.grid(linestyle=':')
@@ -248,6 +254,7 @@ class Blend:
         table.auto_set_column_width(col=list(range(performance_table.shape[1])))
 
         ax4.axis('off')
+        plt.tight_layout()
         plt.show()
 
 
@@ -263,9 +270,10 @@ if __name__ == '__main__':
               (y * 1.7 + np.random.randn(100) * .1).reshape(-1, 1)-1,
               (np.random.randn(100) * .5).reshape(-1, 1)]
     X = np.concatenate(arrays, axis=1)
+    X = pd.DataFrame(X, columns=['A', 'B', 'C'])
 
     # Fit model
-    model = Blend(fit_intercept=True, convex=True)
+    model = Blend(fit_intercept=True, convex=True, lp_norm=1)
     result = model.fit(X, y)
     y_hat = model.predict(X)
 
@@ -275,4 +283,5 @@ if __name__ == '__main__':
     print('Optimal value', result.value)
 
     plt.ion()
-    model.diagnostic_plot(x=x, models=pd.DataFrame(X, columns=['A', 'B', 'C']), target=y)
+    model.diagnostic_plot(x=x, models=X, target=y)
+    plt.show(block=True)
