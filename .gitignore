@@ -1,0 +1,7 @@
+
+# exclude idea folder and all files
+.idea
+.idea/*
+
+*.xml
+*.pyc
