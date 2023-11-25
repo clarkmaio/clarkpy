@@ -34,11 +34,6 @@ class CalendarHelper:
         return calendar
 
 
-
-
-
-        return calendar
-
 if __name__ == '__main__':
 
     calendar = CalendarHelper.load_calendar(datetime(2020, 1, 1), end_date=datetime(2020, 12, 31, 23), freq='H')
