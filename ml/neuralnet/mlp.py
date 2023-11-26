@@ -212,9 +212,6 @@ class NeuralNetModel:
         else:
             return y_pred
 
-
-        return self.mlp.predict(X)
-
     def plot_summary(self):
         self.mlp.plot_summary()
 
