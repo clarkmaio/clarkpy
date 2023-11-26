@@ -1,5 +1,5 @@
 from typing import Dict
-from . import load_pickle_from_url
+from .utils import load_pickle_from_url
 
 LINK = 'https://github.com/clarkmaio/datasets/raw/main/uk_energy_market.pkl'
 

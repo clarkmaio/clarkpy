@@ -55,14 +55,14 @@ def to_torch_tensor(X, y=None) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.
 class MLP(Module):
     def __init__(self,
                  input_shape: int,
-                 hidden_layer_units: Iterable[int] = [100, 1],
-                 hidden_activation: Iterable[Module] = [ReLU(), Identity()],
+                 layers_units: Iterable[int] = [100, 1],
+                 activations: Iterable[Module] = [ReLU(), Identity()],
                  dropout_layers: Union[Iterable[float], None] = None):
 
         super(MLP, self).__init__()
         self.input_shape = input_shape
-        self.hidden_layer_units = hidden_layer_units
-        self.hidden_activation = hidden_activation
+        self.layers_units = layers_units
+        self.activations = activations
         self.dropout_layers = dropout_layers
 
         self._parameters_check()
@@ -71,32 +71,32 @@ class MLP(Module):
 
     def build_layers(self):
         '''Build all the modules needed to define the forward method'''
-        self._layers = self._build_layers(input_shape = self.input_shape, hidden_layers_units = self.hidden_layer_units)
-        self._activations = self._build_activations(hidden_activation = self.hidden_activation)
+        self._layers = self._build_layers(input_shape = self.input_shape, layers_units = self.layers_units)
+        self._activations = self._build_activations(activations = self.activations)
         self._dropouts = self._build_dropouts(dropout_layers = self.dropout_layers)
 
 
-    def _build_layers(self, input_shape, hidden_layers_units: Iterable[int]) -> ModuleList:
+    def _build_layers(self, input_shape, layers_units: Iterable[int]) -> ModuleList:
         '''
         Build ModuleList of linear layers
         '''
         layers = ModuleList()
-        units = [input_shape] + hidden_layers_units
+        units = [input_shape] + layers_units
         for input, output in zip(units[:-1], units[1:]):
             layers.append(Linear(input, output))
         return layers
 
-    def _build_activations(self, hidden_activation: Iterable[Module]) -> ModuleList:
+    def _build_activations(self, activations: Iterable[Module]) -> ModuleList:
         '''
         Build ModuleList of activation functions
         '''
-        activations = ModuleList()
-        for activation in hidden_activation:
+        activations_modulelist = ModuleList()
+        for activation in activations:
             if activation is None:
-                activations.append(Identity())
+                activations_modulelist.append(Identity())
             else:
-                activations.append(activation)
-        return activations
+                activations_modulelist.append(activation)
+        return activations_modulelist
 
     def _build_dropouts(self, dropout_layers: Union[Iterable[float], None]) -> ModuleList:
         '''
@@ -105,7 +105,7 @@ class MLP(Module):
 
         dropout = ModuleList()
         if dropout_layers is None:
-            for _ in self.hidden_layer_units:
+            for _ in self.layers_units:
                 dropout.append(Dropout(0.0))
         else:
             for dropouta_rate in dropout_layers:
@@ -130,14 +130,36 @@ class MLP(Module):
         return self(X)
 
     def _parameters_check(self):
-        assert isinstance(self.hidden_layer_units, Iterable), 'hidden_layer_units must be an iterable'
-        assert isinstance(self.hidden_activation, Iterable), 'hidden_activation must be an iterable'
-        assert len(self.hidden_layer_units) == len(self.hidden_activation), 'Number of hidden layers and hidden activations must be the same'
+        assert isinstance(self.layers_units, Iterable), 'layers_units must be an iterable'
+        assert isinstance(self.activations, Iterable), 'activations must be an iterable'
+        assert len(self.layers_units) == len(self.activations), 'Number of hidden layers and hidden activations must be the same'
+
+
+    def freeze_layer_weights(self, layer_index: Union[Iterable[int], int]):
+        '''
+        Freeze layer weights
+        layer_index
+        '''
+        if isinstance(layer_index, int):
+            layer_index = [layer_index]
+        for i in layer_index:
+            for param in self._layers[i].parameters():
+                param.requires_grad = False
+
+
+    def unfreeze_layer_weights(self):
+        '''
+        Unfreeze all layer weights
+        layer_index
+        '''
+        for layer in self._layers:
+            for param in layer.parameters():
+                param.requires_grad = True
 
 @dataclass
 class NeuralNetModel:
-    hidden_layer_units: Iterable = field(default_factory=lambda: [100])
-    hidden_activation: Iterable[Module] = field(default_factory=lambda: [ReLU()])
+    layers_units: Iterable = field(default_factory=lambda: [100])
+    activations: Iterable[Module] = field(default_factory=lambda: [ReLU()])
     dropout_layers: Union[Iterable[float], None] = None
 
     epochs: int = 1000
@@ -145,36 +167,72 @@ class NeuralNetModel:
     learning_rate: float = 0.01
     optimizer: str = 'Adam'
     loss: Union[str, Module] = 'mse'
+    verbose: bool = False
 
     def __post_init__(self):
+        self.mlp = None
         self.loss_function = loss_hub(self.loss)
+        self.is_trained = False
 
-    def fit(self, X, y):
+    def fit(self, X, y, epochs: int = None, batch_size: int = None, learning_rate: float = None, shuffle: bool = False):
+        '''
+        Just train
+        :param epochs: number of epochs to train. If not specified the init value will be used.
+        :param batch_size: batch size. If not specified the init value will be used.
+        :param learning_rate: learning rate. If not specified the init value will be used.
+        :param shuffle: shuffle data
+        '''
 
+
+        # Update train parameters if needed
+        self.update_train_params(epochs, batch_size, learning_rate)
+
+        # Format X, y to torch tensors and build dataloader
         X_tensor, y_tensor = to_torch_tensor(X, y)
+        self.dataset = TensorDataset(X_tensor, y_tensor)
+        self.dataloader = DataLoader(self.dataset, batch_size=self.batch_size, shuffle=shuffle)
 
-        self.mlp = MLP(input_shape = X_tensor.shape[1],
-                       hidden_layer_units=self.hidden_layer_units,
-                       hidden_activation=self.hidden_activation,
-                       dropout_layers=self.dropout_layers)
+        # Build core model
+        if not self.is_trained:
+            # Rebuild (and rinitialize) model only if it is not trained yet. Important for fine tuning
+            self.mlp = MLP(input_shape = X_tensor.shape[1],
+                           layers_units=self.layers_units,
+                           activations=self.activations,
+                           dropout_layers=self.dropout_layers)
+            self.is_trained = True
 
         self.optimizer_class = optimizer_hub(optimizer=self.optimizer,
                                              parameters=self.mlp.parameters(),
                                              lr=self.learning_rate)
 
-        # Prepare dataloader
-        self.dataset = TensorDataset(X_tensor, y_tensor)
-        self.dataloader = DataLoader(self.dataset, batch_size=self.batch_size, shuffle=True)
-
         # Optimize
         self.loss_history = self.optimization_core(dataloader=self.dataloader)
 
-        return self
+
+    def fine_tune(self, X, y, freeze_layer_index: Union[int, Iterable[int]] = 0, epochs: int = None, batch_size: int = None, learning_rate: float = None, shuffle: bool = False):
+        '''
+        Fine tune a trained model.
+        :param freeze_layer_index: index of the layer to freeze. Weights of this layer will not be updated during fine tuning.
+                                   Usually the first layers are freezed.
+                                   It can be an integer or a list of integers that will refer to layer index.
+        :param epochs: number of epochs to train. If not specified the init value will be used.
+        :param batch_size: batch size. If not specified the init value will be used.
+        :param learning_rate: learning rate. If not specified the init value will be used.
+        :param shuffle: shuffle data
+        '''
 
 
-    def fine_tune(self, X, y, epochs=100, batch_size=32, learning_rate=0.01):
-        assert hasattr(self, 'mlp'), 'Model must be fitted before fine tuning'
-        return
+        assert hasattr(self, 'mlp') and (self.mlp is not None), 'Model must be fitted before fine tuning'
+
+        # Freeze
+        self.mlp.freeze_layer_weights(layer_index=freeze_layer_index)
+
+        # Train
+        self.fit(X=X, y=y, epochs=epochs, batch_size=batch_size, learning_rate=learning_rate, shuffle=shuffle)
+
+        # Unfreeze
+        self.mlp.unfreeze_layer_weights()
+
 
     def optimization_core(self, dataloader) -> pd.DataFrame:
         '''
@@ -187,7 +245,7 @@ class NeuralNetModel:
 
         # Loop on dataloader splitting with epochs and bathces
         for epoch in range(1, self.epochs + 1):
-            pbar = tqdm(self.dataloader, desc=f'Epoch {epoch}/{self.epochs}')
+            pbar = tqdm(self.dataloader, desc=f'Epoch {epoch}/{self.epochs}', disable=not self.verbose)
             for X_batch, y_batch in pbar:
                 self.optimizer_class.zero_grad()
 
@@ -212,6 +270,25 @@ class NeuralNetModel:
         else:
             return y_pred
 
+
+    def _update_learning_rate(self, learning_rate: float = None):
+        if learning_rate is not None:
+            self.learning_rate = learning_rate
+
+    def _update_batch_size(self, batch_size: int = None):
+        if batch_size is not None:
+            self.batch_size = batch_size
+
+    def _update_epochs(self, epochs: int = None):
+        if epochs is not None:
+            self.epochs = epochs
+
+    def update_train_params(self, epochs: int = None, batch_size: int = None, learning_rate: float = None):
+        self._update_learning_rate(learning_rate)
+        self._update_batch_size(batch_size)
+        self._update_epochs(epochs)
+
+
     def plot_summary(self):
         self.mlp.plot_summary()
 
@@ -220,28 +297,38 @@ class NeuralNetModel:
 
 
 if __name__ == '__main__':
-    # Simple resgression example
-    import matplotlib.pyplot as plt
 
-    N = 1000
-    X = np.linspace(0, 10, N).reshape(-1, 1)
-    y = np.sin(X) * X + 0.2*np.random.normal(0, 2, N).reshape(-1, 1)
+    # Build data
+    N_train = 1000
+    X = np.random.randn(N_train, 2)
+    X[:, 0] = np.linspace(0, 10, N_train)
+    y = 1 * X[:, [0]] * np.sin(X[:, [0]]) + 1.1 * np.random.normal(0, 2, N_train).reshape(-1, 1)
 
-    X = pd.DataFrame(X, columns=['x'])
-    y = pd.DataFrame(y, columns=['y'])
+    # Build data
+    N_train = 1000
+    X = np.linspace(0, 10, N_train).reshape(-1, 1)
+    y = 1 * X * np.sin(X) + 1.1 * np.random.normal(0, 2, N_train).reshape(-1, 1)
 
-    neuralnet = NeuralNetModel(hidden_layer_units=[50, 50, 50, 9],
-                               hidden_activation=[ReLU(), ReLU(), ReLU(), Identity()],
-                               dropout_layers=[0, 0, 0, 0],
-                               epochs=600, batch_size=512,
-                               learning_rate=0.01, optimizer='Adam',
-                               loss=AveragePinballLoss(quantiles=[.01, .2, .3, .4, .5, .6, .7, .8, .99]))
+    model = NeuralNetModel(layers_units=[100, 100, 100],
+                            activations=[ReLU(), ReLU(), Identity()],
+                            dropout_layers=None,
+                            epochs=500,
+                            batch_size=512,
+                            learning_rate=0.01,
+                            optimizer='Adam',
+                            loss='crps',
+                            verbose=True)
 
-    neuralnet.fit(X, y)
+    model.fit(X, y)
+    y_pred = model.predict(X)
 
-    pred = neuralnet.predict(X)
-    plt.scatter(X, y, alpha=0.1)
-    plt.plot(X, pred, alpha=1)
+    model.loss_history.plot()
     plt.show()
 
+
+
+
+    plt.scatter(X[:, 0], y)
+    plt.plot(X[:, 0], y_pred, color='orange', alpha=0.1)
+    plt.show()
 
