@@ -1,1 +1,1 @@
-from xgblss_wrap import GaussianXGBLSS
+from .xgblss_wrap import GaussianXGBLSS

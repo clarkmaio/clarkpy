@@ -52,14 +52,14 @@ def to_torch_tensor(X, y=None) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.
 
 
 
-class MLP(Module):
+class MLPFactory(Module):
     def __init__(self,
                  input_shape: int,
                  layers_units: Iterable[int] = [100, 1],
                  activations: Iterable[Module] = [ReLU(), Identity()],
                  dropout_layers: Union[Iterable[float], None] = None):
 
-        super(MLP, self).__init__()
+        super(MLPFactory, self).__init__()
         self.input_shape = input_shape
         self.layers_units = layers_units
         self.activations = activations
@@ -195,7 +195,7 @@ class NeuralNetModel:
         # Build core model
         if not self.is_trained:
             # Rebuild (and rinitialize) model only if it is not trained yet. Important for fine tuning
-            self.mlp = MLP(input_shape = X_tensor.shape[1],
+            self.mlp = MLPFactory(input_shape = X_tensor.shape[1],
                            layers_units=self.layers_units,
                            activations=self.activations,
                            dropout_layers=self.dropout_layers)
@@ -304,31 +304,34 @@ if __name__ == '__main__':
     X[:, 0] = np.linspace(0, 10, N_train)
     y = 1 * X[:, [0]] * np.sin(X[:, [0]]) + 1.1 * np.random.normal(0, 2, N_train).reshape(-1, 1)
 
-    # Build data
-    N_train = 1000
-    X = np.linspace(0, 10, N_train).reshape(-1, 1)
-    y = 1 * X * np.sin(X) + 1.1 * np.random.normal(0, 2, N_train).reshape(-1, 1)
+    # # Build data
+    # N_train = 1000
+    # X = np.linspace(0, 10, N_train).reshape(-1, 1)
+    # y = 1 * X * np.sin(X) + 1.1 * np.random.normal(0, 2, N_train).reshape(-1, 1)
 
-    model = NeuralNetModel(layers_units=[100, 100, 100],
+    model = NeuralNetModel(layers_units=[100, 100, 1],
                             activations=[ReLU(), ReLU(), Identity()],
                             dropout_layers=None,
-                            epochs=500,
+                            epochs=50,
                             batch_size=512,
                             learning_rate=0.01,
                             optimizer='Adam',
-                            loss='crps',
+                            loss='mae',
                             verbose=True)
 
     model.fit(X, y)
     y_pred = model.predict(X)
 
+
+    model.fine_tune(X, y, freeze_layer_index=[0])
+
     model.loss_history.plot()
     plt.show()
 
-
-
-
-    plt.scatter(X[:, 0], y)
-    plt.plot(X[:, 0], y_pred, color='orange', alpha=0.1)
+    y_pred_quantile= np.quantile(y_pred, axis=1, q=[0.1, .25, 0.5, .75, 0.9])
+    plt.scatter(X[:, 0], y, color='blue', alpha=0.05)
+    plt.fill_between(X[:, 0], y_pred_quantile[0], y_pred_quantile[-1], alpha=0.25, color='red', edgecolors='black')
+    plt.fill_between(X[:, 0], y_pred_quantile[1], y_pred_quantile[-2], alpha=0.25, color='red', edgecolors='black')
+    #plt.plot(X[:, 0], y_pred, color='orange', alpha=0.1)
     plt.show()
 
